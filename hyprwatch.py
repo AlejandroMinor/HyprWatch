@@ -12,6 +12,14 @@ PREV_PATH = f"{TEMP_DIR}hyprwatch_1.png"
 CURR_PATH = f"{TEMP_DIR}hyprwatch_2.png"
 PROJECT_TITLE = "Hyprwatch - Screen Change Monitor for Hyprland"
 
+RESET  = "\033[0m"
+BOLD   = "\033[1m"
+DIM    = "\033[2m"
+RED    = "\033[31m"
+GREEN  = "\033[32m"
+YELLOW = "\033[33m"
+CYAN   = "\033[36m"
+
 
 def capture_image(monitor: str, output: str):
     result = subprocess.run(
@@ -19,7 +27,7 @@ def capture_image(monitor: str, output: str):
         capture_output=True
     )
     if result.returncode != 0:
-        print(f"Error capturing screen: {result.stderr.decode()}")
+        print(f"{RED}Error capturing screen: {result.stderr.decode()}{RESET}")
         sys.exit(1)
 
 
@@ -40,17 +48,17 @@ def run_on_change(command: str | None, diff_pct: float, monitor: str):
 
 
 def print_startup(args):
-    print("─" * 32)
-    print(PROJECT_TITLE)
-    print("─" * 32)
-    print(f"Monitor    : {args.monitor}")
-    print(f"Interval   : {args.interval}s")
-    print(f"Threshold  : {args.threshold}%")
-    print(f"Noise      : {args.noise}")
-    print(f"Max alerts : {args.max_alerts if args.max_alerts > 0 else 'unlimited'}")
-    print(f"Cooldown   : {args.cooldown}s")
-    print("─" * 32)
-    print("Starting up — capturing baseline frame...")
+    print(f"{CYAN}{'─' * 32}{RESET}")
+    print(f"{BOLD}{PROJECT_TITLE}{RESET}")
+    print(f"{CYAN}{'─' * 32}{RESET}")
+    print(f"{DIM}Monitor    :{RESET} {args.monitor}")
+    print(f"{DIM}Interval   :{RESET} {args.interval}s")
+    print(f"{DIM}Threshold  :{RESET} {args.threshold}%")
+    print(f"{DIM}Noise      :{RESET} {args.noise}")
+    print(f"{DIM}Max alerts :{RESET} {args.max_alerts if args.max_alerts > 0 else 'unlimited'}")
+    print(f"{DIM}Cooldown   :{RESET} {args.cooldown}s")
+    print(f"{CYAN}{'─' * 32}{RESET}")
+    print(f"{DIM}Starting up — capturing baseline frame...{RESET}")
 
 def define_args():
     parser = argparse.ArgumentParser(description=PROJECT_TITLE)
@@ -69,7 +77,7 @@ def main():
     print_startup(args)
 
     capture_image(args.monitor, PREV_PATH)
-    print("Monitoring... (Ctrl+C to stop)\n")
+    print(f"{GREEN}Monitoring...{RESET} {DIM}(Ctrl+C to stop){RESET}\n")
 
     alert_count = 0
 
@@ -82,22 +90,22 @@ def main():
             curr_frame = convert_image_to_array(CURR_PATH)
 
             diff_pct = compare_array(prev_frame, curr_frame, args.noise)
-            print(f"Change: {diff_pct:.1f}%")
+            print(f"{DIM}Change: {diff_pct:.1f}%{RESET}")
 
             if diff_pct > args.threshold:
-                print(f"[ALERT] Change detected — {diff_pct:.1f}% on {args.monitor}")
+                print(f"{RED}{BOLD}[ALERT]{RESET} Change detected — {diff_pct:.1f}% on {args.monitor}")
                 run_on_change(args.on_change, diff_pct, args.monitor)
                 alert_count += 1
                 if args.max_alerts > 0 and alert_count >= args.max_alerts:
-                    print(f"Reached max alerts ({args.max_alerts}). Stopping.")
+                    print(f"{YELLOW}Reached max alerts ({args.max_alerts}). Stopping.{RESET}")
                     break
                 if args.cooldown > 0:
-                    print(f"Next check in {args.cooldown}s...")
+                    print(f"{DIM}Next check in {args.cooldown}s...{RESET}")
                     time.sleep(args.cooldown)
 
 
     except KeyboardInterrupt:
-        print("\nStopped.")
+        print(f"\n{DIM}Stopped.{RESET}")
         if os.path.exists(PREV_PATH):
             os.remove(PREV_PATH)
         if os.path.exists(CURR_PATH):
