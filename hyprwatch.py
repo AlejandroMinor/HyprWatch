@@ -2,24 +2,19 @@ import subprocess
 import shlex
 import time
 import argparse
+import logging
 import sys
 import os
 from PIL import Image
 import numpy as np
+from logger import setup_logging
 
 TEMP_DIR = "/tmp/hyprwatch/"
 PREV_PATH = f"{TEMP_DIR}hyprwatch_1.png"
 CURR_PATH = f"{TEMP_DIR}hyprwatch_2.png"
 PROJECT_TITLE = "Hyprwatch - Screen Change Monitor for Hyprland"
 
-RESET  = "\033[0m"
-BOLD   = "\033[1m"
-DIM    = "\033[2m"
-RED    = "\033[31m"
-GREEN  = "\033[32m"
-YELLOW = "\033[33m"
-CYAN   = "\033[36m"
-
+log = logging.getLogger(__name__)
 
 def capture_image(monitor: str, output: str):
     result = subprocess.run(
@@ -27,7 +22,7 @@ def capture_image(monitor: str, output: str):
         capture_output=True
     )
     if result.returncode != 0:
-        print(f"{RED}Error capturing screen: {result.stderr.decode()}{RESET}")
+        log.error(f"Error capturing screen: {result.stderr.decode()}")
         sys.exit(1)
 
 
@@ -47,18 +42,16 @@ def run_on_change(command: str | None, diff_pct: float, monitor: str):
         subprocess.run(["notify-send", "hyprwatch", f"Detected {diff_pct:.1f}% change on {monitor}"])
 
 
-def print_startup(args):
-    print(f"{CYAN}{'─' * 32}{RESET}")
-    print(f"{BOLD}{PROJECT_TITLE}{RESET}")
-    print(f"{CYAN}{'─' * 32}{RESET}")
-    print(f"{DIM}Monitor    :{RESET} {args.monitor}")
-    print(f"{DIM}Interval   :{RESET} {args.interval}s")
-    print(f"{DIM}Threshold  :{RESET} {args.threshold}%")
-    print(f"{DIM}Noise      :{RESET} {args.noise}")
-    print(f"{DIM}Max alerts :{RESET} {args.max_alerts if args.max_alerts > 0 else 'unlimited'}")
-    print(f"{DIM}Cooldown   :{RESET} {args.cooldown}s")
-    print(f"{CYAN}{'─' * 32}{RESET}")
-    print(f"{DIM}Starting up — capturing baseline frame...{RESET}")
+def log_startup(args):
+    log.info(PROJECT_TITLE)
+    log.debug(f"Monitor    : {args.monitor}")
+    log.debug(f"Interval   : {args.interval}s")
+    log.debug(f"Threshold  : {args.threshold}%")
+    log.debug(f"Noise      : {args.noise}")
+    log.debug(f"Max alerts : {args.max_alerts if args.max_alerts > 0 else 'unlimited'}")
+    log.debug(f"Cooldown   : {args.cooldown}s")
+    log.debug("Starting up — capturing baseline frame...")
+
 
 def define_args():
     parser = argparse.ArgumentParser(description=PROJECT_TITLE)
@@ -69,15 +62,19 @@ def define_args():
     parser.add_argument("--on-change", default=None, dest="on_change", help="Command to run on change (default: notify-send)")
     parser.add_argument("--max-alerts", type=int, default=3, dest="max_alerts", help="Max alerts to send, 0 for unlimited (default: 3)")
     parser.add_argument("--cooldown", type=int, default=30, help="Seconds to wait after a change before resuming (default: 30)")
+    parser.add_argument("--quiet", action="store_true", help="Suppress all output, only warnings and errors are shown")
     return parser.parse_args()
 
 def main():
+    setup_logging()
     os.makedirs(TEMP_DIR, exist_ok=True)
     args = define_args()
-    print_startup(args)
+    if args.quiet:
+        logging.getLogger().setLevel(logging.WARNING)
+    log_startup(args)
 
     capture_image(args.monitor, PREV_PATH)
-    print(f"{GREEN}Monitoring...{RESET} {DIM}(Ctrl+C to stop){RESET}\n")
+    log.info("Monitoring... (Ctrl+C to stop)\n")
 
     alert_count = 0
 
@@ -90,22 +87,21 @@ def main():
             curr_frame = convert_image_to_array(CURR_PATH)
 
             diff_pct = compare_array(prev_frame, curr_frame, args.noise)
-            print(f"{DIM}Change: {diff_pct:.1f}%{RESET}")
+            log.debug(f"Change: {diff_pct:.1f}%")
 
             if diff_pct > args.threshold:
-                print(f"{RED}{BOLD}[ALERT]{RESET} Change detected — {diff_pct:.1f}% on {args.monitor}")
+                log.warning(f"Change detected — {diff_pct:.1f}% on {args.monitor}")
                 run_on_change(args.on_change, diff_pct, args.monitor)
                 alert_count += 1
                 if args.max_alerts > 0 and alert_count >= args.max_alerts:
-                    print(f"{YELLOW}Reached max alerts ({args.max_alerts}). Stopping.{RESET}")
+                    log.warning(f"Reached max alerts ({args.max_alerts}). Stopping.")
                     break
                 if args.cooldown > 0:
-                    print(f"{DIM}Next check in {args.cooldown}s...{RESET}")
+                    log.warning(f"Next check in {args.cooldown}s...")
                     time.sleep(args.cooldown)
 
-
     except KeyboardInterrupt:
-        print(f"\n{DIM}Stopped.{RESET}")
+        log.debug("\nStopped.")
         if os.path.exists(PREV_PATH):
             os.remove(PREV_PATH)
         if os.path.exists(CURR_PATH):

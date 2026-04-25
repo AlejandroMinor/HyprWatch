@@ -36,6 +36,7 @@ python hyprwatch.py --monitor DP-1
 | `--on-change` | *(notify-send)* | Command to run when a change is detected |
 | `--max-alerts` | `3` | Max alerts before stopping, `0` for unlimited |
 | `--cooldown` | `30` | Seconds to wait after an alert before resuming |
+| `--quiet` | `false` | Suppress all output, only warnings and errors are shown |
 
 ## Examples
 
