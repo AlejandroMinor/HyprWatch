@@ -7,6 +7,8 @@ from PIL import Image
 import numpy as np
 
 TEMP_DIR = "/tmp/hyprwatch/"
+PREV_PATH = f"{TEMP_DIR}hyprwatch_1.png"
+CURR_PATH = f"{TEMP_DIR}hyprwatch_2.png"
 PROJECT_TITLE = "Hyprwatch - Screen Change Monitor for Hyprland"
 
 
@@ -32,19 +34,7 @@ def system_notify(message: str):
     subprocess.run(["notify-send", "hyprwatch", message])
 
 
-def main():
-    os.makedirs(TEMP_DIR, exist_ok=True)
-
-    parser = argparse.ArgumentParser(description=PROJECT_TITLE)
-    parser.add_argument("--monitor", default="DP-1", help="Monitor name (default: DP-1)")
-    parser.add_argument("--interval", type=float, default=2.0, help="Seconds between checks (default: 2)")
-    parser.add_argument("--threshold", type=float, default=5.0, help="Percentage change to trigger a notification (default: 5)")
-    parser.add_argument("--noise", type=int, default=10, help="Pixel change threshold to ignore minor differences (default: 10)")
-    args = parser.parse_args()
-
-    prev_path = f"{TEMP_DIR}hyprwatch_1.png"
-    curr_path = f"{TEMP_DIR}hyprwatch_2.png"
-
+def print_startup(args):
     print("─" * 32)
     print(PROJECT_TITLE)
     print("─" * 32)
@@ -55,16 +45,29 @@ def main():
     print("─" * 32)
     print("Starting up — capturing baseline frame...")
 
-    capture_image(args.monitor, prev_path)
+def define_args():
+    parser = argparse.ArgumentParser(description=PROJECT_TITLE)
+    parser.add_argument("--monitor", default="DP-1", help="Monitor name (default: DP-1)")
+    parser.add_argument("--interval", type=float, default=2.0, help="Seconds between checks (default: 2)")
+    parser.add_argument("--threshold", type=float, default=5.0, help="Percentage change to trigger a notification (default: 5)")
+    parser.add_argument("--noise", type=int, default=10, help="Pixel change threshold to ignore minor differences (default: 10)")
+    return parser.parse_args()
+
+def main():
+    os.makedirs(TEMP_DIR, exist_ok=True)
+    args = define_args()
+    print_startup(args)
+
+    capture_image(args.monitor, PREV_PATH)
     print("Monitoring... (Ctrl+C to stop)\n")
 
     try:
         while True:
             time.sleep(args.interval)
-            capture_image(args.monitor, curr_path)
+            capture_image(args.monitor, CURR_PATH)
 
-            prev_frame = convert_image_to_array(prev_path)
-            curr_frame = convert_image_to_array(curr_path)
+            prev_frame = convert_image_to_array(PREV_PATH)
+            curr_frame = convert_image_to_array(CURR_PATH)
 
             diff_pct = compare_array(prev_frame, curr_frame, args.noise)
             print(f"Change: {diff_pct:.1f}%")
@@ -74,15 +77,15 @@ def main():
                 print(f"[ALERT] Detected {diff_pct:.1f}% change on {args.monitor}")
 
             # The actual frame replacement happens here, after the comparison
-            #os.replace(curr_path, prev_path)
+            #os.replace(CURR_PATH, PREV_PATH)
 
     except KeyboardInterrupt:
         print("\nStopped.")
         # Cleanup temporary files
-        if os.path.exists(prev_path):
-            os.remove(prev_path)
-        if os.path.exists(curr_path):
-            os.remove(curr_path)
+        if os.path.exists(PREV_PATH):
+            os.remove(PREV_PATH)
+        if os.path.exists(CURR_PATH):
+            os.remove(CURR_PATH)
 
 
 if __name__ == "__main__":
