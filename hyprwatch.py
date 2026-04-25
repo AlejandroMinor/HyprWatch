@@ -7,6 +7,7 @@ from PIL import Image
 import numpy as np
 
 TEMP_DIR = "/tmp/hyprwatch/"
+PROJECT_TITLE = "Hyprwatch - Screen Change Monitor for Hyprland"
 
 
 def capture_image(monitor: str, output: str):
@@ -34,24 +35,28 @@ def system_notify(message: str):
 def main():
     os.makedirs(TEMP_DIR, exist_ok=True)
 
-    parser = argparse.ArgumentParser(description="hyprwatch - Screen change monitor for Hyprland")
+    parser = argparse.ArgumentParser(description=PROJECT_TITLE)
     parser.add_argument("--monitor", default="DP-1", help="Monitor name (default: DP-1)")
     parser.add_argument("--interval", type=float, default=2.0, help="Seconds between checks (default: 2)")
-    parser.add_argument("--threshold", type=float, default=5.0, help="%% percentage change to trigger notification (default: 5)")
+    parser.add_argument("--threshold", type=float, default=5.0, help="Percentage change to trigger a notification (default: 5)")
     parser.add_argument("--noise", type=int, default=10, help="Pixel change threshold to ignore minor differences (default: 10)")
     args = parser.parse_args()
 
     frame1 = f"{TEMP_DIR}hyprwatch_1.png"
     frame2 = f"{TEMP_DIR}hyprwatch_2.png"
 
-    print(f"Monitor : {args.monitor}")
-    print(f"Interval : {args.interval}s")
+    print("─" * 32)
+    print(PROJECT_TITLE)
+    print("─" * 32)
+    print(f"Monitor   : {args.monitor}")
+    print(f"Interval  : {args.interval}s")
     print(f"Threshold : {args.threshold}%")
-    print(f"Noise : {args.noise}")
-    print("Creating initial capture...")
+    print(f"Noise     : {args.noise}")
+    print("─" * 32)
+    print("Starting up — capturing baseline frame...")
 
     capture_image(args.monitor, frame1)
-    print("Starting up — capturing baseline frame...")
+    print("Monitoring... (Ctrl+C to stop)\n")
 
     try:
         while True:
@@ -62,7 +67,7 @@ def main():
             array2 = convert_image_to_array(frame2)
 
             change = compare_array(array1, array2, args.noise)
-            print(f"Change detected: {change:.1f}%")
+            print(f"Change: {change:.1f}%")
 
             if change > args.threshold:
                 # notify(f"Detected {change:.1f}% change on {args.monitor}")
@@ -72,7 +77,7 @@ def main():
             #os.replace(frame2, frame1)
 
     except KeyboardInterrupt:
-        print("\nDetenido.")
+        print("\nStopped.")
         # Cleanup temporary files
         if os.path.exists(frame1):
             os.remove(frame1)
