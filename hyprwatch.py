@@ -20,8 +20,8 @@ def capture_image(monitor: str, output: str):
         sys.exit(1)
 
 
-def compare_array(array1: str, array2: str, noise: int) -> float:
-    diff = np.abs(array1.astype(int) - array2.astype(int))
+def compare_array(prev_frame: np.ndarray, curr_frame: np.ndarray, noise: int) -> float:
+    diff = np.abs(prev_frame.astype(int) - curr_frame.astype(int))
     return np.any(diff > noise, axis=-1).mean() * 100
 
 
@@ -42,8 +42,8 @@ def main():
     parser.add_argument("--noise", type=int, default=10, help="Pixel change threshold to ignore minor differences (default: 10)")
     args = parser.parse_args()
 
-    frame1 = f"{TEMP_DIR}hyprwatch_1.png"
-    frame2 = f"{TEMP_DIR}hyprwatch_2.png"
+    prev_path = f"{TEMP_DIR}hyprwatch_1.png"
+    curr_path = f"{TEMP_DIR}hyprwatch_2.png"
 
     print("─" * 32)
     print(PROJECT_TITLE)
@@ -55,34 +55,34 @@ def main():
     print("─" * 32)
     print("Starting up — capturing baseline frame...")
 
-    capture_image(args.monitor, frame1)
+    capture_image(args.monitor, prev_path)
     print("Monitoring... (Ctrl+C to stop)\n")
 
     try:
         while True:
             time.sleep(args.interval)
-            capture_image(args.monitor, frame2)
+            capture_image(args.monitor, curr_path)
 
-            array1 = convert_image_to_array(frame1)
-            array2 = convert_image_to_array(frame2)
+            prev_frame = convert_image_to_array(prev_path)
+            curr_frame = convert_image_to_array(curr_path)
 
-            change = compare_array(array1, array2, args.noise)
-            print(f"Change: {change:.1f}%")
+            diff_pct = compare_array(prev_frame, curr_frame, args.noise)
+            print(f"Change: {diff_pct:.1f}%")
 
-            if change > args.threshold:
-                # notify(f"Detected {change:.1f}% change on {args.monitor}")
-                print(f"[ALERT] Detected {change:.1f}% change on {args.monitor}")
+            if diff_pct > args.threshold:
+                # system_notify(f"Detected {diff_pct:.1f}% change on {args.monitor}")
+                print(f"[ALERT] Detected {diff_pct:.1f}% change on {args.monitor}")
 
             # The actual frame replacement happens here, after the comparison
-            #os.replace(frame2, frame1)
+            #os.replace(curr_path, prev_path)
 
     except KeyboardInterrupt:
         print("\nStopped.")
         # Cleanup temporary files
-        if os.path.exists(frame1):
-            os.remove(frame1)
-        if os.path.exists(frame2):
-            os.remove(frame2)
+        if os.path.exists(prev_path):
+            os.remove(prev_path)
+        if os.path.exists(curr_path):
+            os.remove(curr_path)
 
 
 if __name__ == "__main__":
