@@ -3,6 +3,7 @@ import shlex
 import time
 import argparse
 import logging
+import json
 import sys
 import os
 from PIL import Image
@@ -55,7 +56,7 @@ def log_startup(args: argparse.Namespace) -> None:
 
 def define_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=PROJECT_TITLE)
-    parser.add_argument("--monitor", default="DP-1", help="Monitor name (default: DP-1)")
+    parser.add_argument("--monitor", default=None, help="Monitor name (default: interactive picker)")
     parser.add_argument("--interval", type=float, default=2.0, help="Seconds between checks (default: 2)")
     parser.add_argument("--threshold", type=float, default=5.0, help="Percentage change to trigger a notification (default: 5)")
     parser.add_argument("--noise", type=int, default=10, help="Pixel change threshold to ignore minor differences (default: 10)")
@@ -65,12 +66,35 @@ def define_args() -> argparse.Namespace:
     parser.add_argument("--quiet", action="store_true", help="Suppress all output, only warnings and errors are shown")
     return parser.parse_args()
 
+def get_monitors() -> list[dict]:
+    result = subprocess.run(["hyprctl", "monitors", "-j"], capture_output=True)
+    if result.returncode != 0:
+        log.error(f"Error getting monitors: {result.stderr.decode()}")
+        sys.exit(1)
+    return json.loads(result.stdout.decode())
+
+def select_monitor(monitors: list[dict]) -> str:
+    lines = [f"{m['name']} ({m['model']})" for m in monitors]
+    fzf = subprocess.run(
+        ["fzf", "--prompt=  Select monitor to watch: ", "--layout=reverse", "--border=none", "--no-info",
+         "--header=No monitor specified via --monitor, select one to continue...", "--header-first"],
+        input="\n".join(lines).encode(),
+        capture_output=True,
+    )
+    if fzf.returncode != 0 or not fzf.stdout:
+        print("No monitor selected.")
+        sys.exit(0)
+    return fzf.stdout.decode().split()[0]
+
+
 def main() -> None:
     setup_logging()
     os.makedirs(TEMP_DIR, exist_ok=True)
     args = define_args()
     if args.quiet:
         logging.getLogger().setLevel(logging.WARNING)
+    if args.monitor is None:
+        args.monitor = select_monitor(get_monitors())
     log_startup(args)
 
     capture_image(args.monitor, PREV_PATH)
