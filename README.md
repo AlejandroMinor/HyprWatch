@@ -61,3 +61,7 @@ To list monitors manually:
 ```bash
 hyprctl monitors
 ```
+
+---
+
+> Looking for the older version with generic Wayland compositor support? Check out the `v1.0-wayland-generic` tag.
