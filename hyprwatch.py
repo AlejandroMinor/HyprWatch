@@ -16,7 +16,7 @@ PROJECT_TITLE = "Hyprwatch - Screen Change Monitor for Hyprland"
 
 log = logging.getLogger(__name__)
 
-def capture_image(monitor: str, output: str):
+def capture_image(monitor: str, output: str) -> None:
     result = subprocess.run(
         ["grim", "-o", monitor, output],
         capture_output=True
@@ -35,14 +35,14 @@ def convert_image_to_array(image_path: str) -> np.ndarray:
     return np.array(Image.open(image_path))
 
 
-def run_on_change(command: str | None, diff_pct: float, monitor: str):
+def run_on_change(command: str | None, diff_pct: float, monitor: str) -> None:
     if command:
         subprocess.run(shlex.split(command))
     else:
         subprocess.run(["notify-send", "hyprwatch", f"Detected {diff_pct:.1f}% change on {monitor}"])
 
 
-def log_startup(args):
+def log_startup(args: argparse.Namespace) -> None:
     log.info(PROJECT_TITLE)
     log.debug(f"Monitor    : {args.monitor}")
     log.debug(f"Interval   : {args.interval}s")
@@ -53,7 +53,7 @@ def log_startup(args):
     log.debug("Starting up — capturing baseline frame...")
 
 
-def define_args():
+def define_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=PROJECT_TITLE)
     parser.add_argument("--monitor", default="DP-1", help="Monitor name (default: DP-1)")
     parser.add_argument("--interval", type=float, default=2.0, help="Seconds between checks (default: 2)")
@@ -65,7 +65,7 @@ def define_args():
     parser.add_argument("--quiet", action="store_true", help="Suppress all output, only warnings and errors are shown")
     return parser.parse_args()
 
-def main():
+def main() -> None:
     setup_logging()
     os.makedirs(TEMP_DIR, exist_ok=True)
     args = define_args()
