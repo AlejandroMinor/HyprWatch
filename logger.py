@@ -27,3 +27,4 @@ def setup_logging() -> None:
     logging.basicConfig(level=logging.DEBUG, handlers=[handler])
     logging.getLogger("PIL").setLevel(logging.WARNING)
     logging.getLogger("numpy").setLevel(logging.WARNING)
+    logging.getLogger("pytesseract").setLevel(logging.WARNING)

@@ -152,7 +152,11 @@ def log_startup(args: argparse.Namespace) -> None:
     log.debug(f"Interval   : {args.interval}s")
     log.debug(f"Max alerts : {args.max_alerts if args.max_alerts > 0 else 'unlimited'}")
     log.debug(f"Cooldown   : {args.cooldown}s")
-    if args.on_stable:
+    if args.ocr_find:
+        log.debug(f"OCR lang   : {args.ocr_lang}")
+        log.debug(f"OCR scale  : {args.ocr_scale}x")
+        log.debug(f"OCR find   : '{args.ocr_find}'")
+    elif args.on_stable:
         log.debug(f"Interval   : {args.stable_interval}s (stable)")
         log.debug(f"Threshold  : {args.stable_threshold}% (stable)")
         log.debug(f"Noise      : {args.stable_noise} (stable)")
@@ -178,6 +182,9 @@ def define_args() -> argparse.Namespace:
     parser.add_argument("--stable-interval", type=float, default=5.0, dest="stable_interval", help="Seconds without change required to consider stable (default: 5)")
     parser.add_argument("--stable-threshold", type=float, default=0.05, dest="stable_threshold", help="Max %% change to consider stable (default: 0.05 — tolerates cursor blink)")
     parser.add_argument("--stable-noise", type=int, default=0, dest="stable_noise", help="Per-pixel difference to ignore in stable mode (default: 0 — pixel-perfect)")
+    parser.add_argument("--ocr-find", default=None, dest="ocr_find", metavar="TEXT", help="Enable OCR mode — alert when TEXT is found on screen")
+    parser.add_argument("--ocr-lang", default="eng", dest="ocr_lang", help="Tesseract language code (default: eng)")
+    parser.add_argument("--ocr-scale", type=int, default=2, dest="ocr_scale", help="Scale factor applied to the image before OCR — higher improves accuracy on small text (default: 2)")
     return parser.parse_args()
 
 def get_monitors() -> list[dict]:
@@ -218,6 +225,43 @@ def cleanup_temp_files() -> None:
         os.remove(PREV_PATH)
     if os.path.exists(CURR_PATH):
         os.remove(CURR_PATH)
+
+
+def extract_text(image_path: str, lang: str, scale: int) -> str:
+    try:
+        import pytesseract
+    except ImportError:
+        log.error("pytesseract not installed. Run: pip install pytesseract  (also needs: pacman -S tesseract tesseract-data-eng)")
+        sys.exit(1)
+    img = Image.open(image_path)
+    if scale > 1:
+        img = img.resize((img.width * scale, img.height * scale), Image.Resampling.LANCZOS)
+    return pytesseract.image_to_string(img, lang=lang).strip()
+
+
+def ocr_loop(monitor: str | None, area: str | None, max_alerts: int, cooldown: int,
+             interval: float, on_change: str | None, ocr_lang: str, ocr_find: str, ocr_scale: int) -> None:
+    target = area if area else monitor
+    alert_count = 0
+    log.debug(f"Searching for '{ocr_find}' on {target}...")
+    try:
+        while True:
+            capture_image(monitor, area, CURR_PATH)
+            text = extract_text(CURR_PATH, ocr_lang, ocr_scale)
+            if ocr_find.lower() in text.lower():
+                log.warning(f"Found '{ocr_find}' on {target}")
+                run_action(on_change, f"Found '{ocr_find}' on {target}")
+                alert_count += 1
+                if max_alerts_reached(alert_count, max_alerts):
+                    break
+                wait_cooldown(cooldown)
+            else:
+                log.debug(f"'{ocr_find}' not found, next check in {interval}s...")
+                time.sleep(interval)
+    except KeyboardInterrupt:
+        log.debug("\nStopped.")
+    finally:
+        cleanup_temp_files()
 
 
 def change_loop(monitor: str | None, area: str | None, max_alerts: int, cooldown: int,
@@ -311,7 +355,9 @@ def main() -> None:
     log.info("Monitoring... (Ctrl+C to stop)\n")
 
     try:
-        if args.on_stable is not None:
+        if args.ocr_find:
+            ocr_loop(args.monitor, args.area, args.max_alerts, args.cooldown, args.interval, args.on_change, args.ocr_lang, args.ocr_find, args.ocr_scale)
+        elif args.on_stable is not None:
             stable_loop(args.monitor, args.area, args.max_alerts, args.cooldown, args.stable_interval, args.stable_noise, args.stable_threshold, args.on_stable or None)
         else:
             change_loop(args.monitor, args.area, args.max_alerts, args.cooldown, args.interval, args.noise, args.threshold, args.on_change)

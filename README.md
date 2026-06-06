@@ -9,6 +9,14 @@ Detects when something changes on your screen and sends a desktop notification �
 sudo pacman -S python-pillow python-numpy grim libnotify fzf slurp gtk4-layer-shell python-gobject
 ```
 
+For OCR mode (`--ocr-find`), also install:
+
+```bash
+sudo pacman -S tesseract tesseract-data-eng python-pytesseract
+```
+
+For other languages replace `tesseract-data-eng` with the appropriate package (e.g. `tesseract-data-spa` for Spanish) and pass the matching code via `--ocr-lang`. Available languages and their codes are listed in the [Tesseract documentation](https://tesseract-ocr.github.io/tessdoc/Data-Files-in-different-versions.html).
+
 ## Usage
 
 Run without `--monitor` to get an interactive picker:
@@ -51,6 +59,9 @@ When using `--area`, a red dashed border is drawn over the selected region for t
 | `--stable-threshold` | `0.05` | Max % change to consider stable — tolerates cursor blink, use `0.0` for pixel-perfect |
 | `--stable-noise` | `0` | Per-pixel difference to ignore in stable mode — `0` means pixel-perfect |
 | `--quiet` | `false` | Suppress all output, only warnings and errors are shown |
+| `--ocr-find TEXT` | *(none)* | Enable OCR mode — alert when TEXT is found on screen |
+| `--ocr-lang` | `eng` | Tesseract language code (requires the matching `tesseract-data-*` package) |
+| `--ocr-scale` | `2` | Scale factor applied before OCR — increase if small text is not being detected. On a full monitor keep it at 2 or 3; on a small area you have more room to experiment. It is recommended to test with a few runs first to find the value where your target text is reliably recognized |
 
 ## Examples
 
@@ -78,6 +89,17 @@ Override stable sensitivity for a very subtle indicator:
 ```bash
 python hyprwatch.py --monitor DP-1 --on-stable "notify-send hyprwatch done" --stable-interval 3 --stable-threshold 0.1 --stable-noise 2
 ```
+
+Wait until a specific text appears on screen — useful for GUI apps, renderers, or any process whose output you can only see visually:
+```bash
+python hyprwatch.py --ocr-find "Render complete" --monitor DP-1
+python hyprwatch.py --ocr-find "Build successful" --area --interval 2
+python hyprwatch.py --ocr-find "Exportación terminada" --monitor DP-1 --ocr-lang spa  # text on screen is in Spanish
+```
+
+All standard options work in OCR mode (`--interval`, `--max-alerts`, `--cooldown`, `--on-change`, `--area`, `--monitor`). Since OCR itself takes 300–800ms per capture depending on the area size, very low `--interval` values have diminishing returns — the default of 5s is a good starting point.
+
+> **Not for log files.** If the output is a text file or a terminal you control, `grep`, `tail -f`, or a shell one-liner will always be faster and more reliable. OCR mode is for when there is no other way to read the output — a GUI app, a remote desktop, a web dashboard, etc.
 
 
 ## Customizing the overlay
