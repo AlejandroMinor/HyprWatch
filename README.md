@@ -58,6 +58,7 @@ When using `--area`, a red dashed border is drawn over the selected region for t
 | `--stable-interval` | `5.0` | Seconds without change required to consider stable |
 | `--stable-threshold` | `0.05` | Max % change to consider stable — tolerates cursor blink, use `0.0` for pixel-perfect |
 | `--stable-noise` | `0` | Per-pixel difference to ignore in stable mode — `0` means pixel-perfect |
+| `--show-diff` | `false` | Open a diff image highlighting changed pixels when a change is detected |
 | `--quiet` | `false` | Suppress all output, only warnings and errors are shown |
 | `--ocr-find TEXT` | *(none)* | Enable OCR mode — alert when TEXT is found on screen |
 | `--ocr-lang` | `eng` | Tesseract language code (requires the matching `tesseract-data-*` package) |
@@ -89,6 +90,13 @@ Override stable sensitivity for a very subtle indicator:
 ```bash
 python hyprwatch.py --monitor DP-1 --on-stable "notify-send hyprwatch done" --stable-interval 3 --stable-threshold 0.1 --stable-noise 2
 ```
+
+Open a diff image highlighting exactly what changed — works best with `--area` since a full monitor will always have minor pixel movement (cursor, animations, UI elements):
+```bash
+python hyprwatch.py --show-diff --area --noise 20
+```
+
+The diff image is saved to `/tmp/hyprwatch/hyprwatch_diff.png` and opened with your default image viewer. Changed pixels are highlighted in red over the original frame — useful for spotting subtle UI changes like a status indicator flipping or a button appearing.
 
 Wait until a specific text appears on screen — useful for GUI apps, renderers, or any process whose output you can only see visually:
 ```bash

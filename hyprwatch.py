@@ -14,6 +14,7 @@ from logger import setup_logging
 TEMP_DIR = "/tmp/hyprwatch/"
 PREV_PATH = f"{TEMP_DIR}hyprwatch_1.png"
 CURR_PATH = f"{TEMP_DIR}hyprwatch_2.png"
+DIFF_PATH = f"{TEMP_DIR}hyprwatch_diff.png"
 PROJECT_TITLE = "Hyprwatch - Screen Change Monitor for Hyprland"
 
 OVERLAY_COLOR = (1, 0.15, 0.15, 0.95)  # RGBA, values 0-1
@@ -178,6 +179,7 @@ def define_args() -> argparse.Namespace:
     parser.add_argument("--max-alerts", type=int, default=1, dest="max_alerts", help="Max alerts to send, 0 for unlimited (default: 1)")
     parser.add_argument("--cooldown", type=int, default=30, help="Seconds to wait after a change before resuming (default: 30)")
     parser.add_argument("--quiet", action="store_true", help="Suppress all output, only warnings and errors are shown")
+    parser.add_argument("--show-diff", action="store_true", dest="show_diff", help="Open a diff image highlighting changed pixels when a change is detected")
     parser.add_argument("--on-stable", nargs="?", const="", default=None, dest="on_stable", help="Enable stable mode — optionally pass a command to run (default: notify-send)")
     parser.add_argument("--stable-interval", type=float, default=5.0, dest="stable_interval", help="Seconds without change required to consider stable (default: 5)")
     parser.add_argument("--stable-threshold", type=float, default=0.05, dest="stable_threshold", help="Max %% change to consider stable (default: 0.05 — tolerates cursor blink)")
@@ -218,6 +220,15 @@ def wait_cooldown(cooldown: int) -> None:
     if cooldown > 0:
         log.warning(f"Next check in {cooldown}s...")
         time.sleep(cooldown)
+
+
+def show_diff_image(prev_frame: np.ndarray, curr_frame: np.ndarray, noise: int) -> None:
+    diff = np.abs(prev_frame.astype(int) - curr_frame.astype(int))
+    mask = np.any(diff > noise, axis=-1)
+    result = curr_frame.copy()
+    result[mask] = [255, 50, 50]
+    Image.fromarray(result.astype(np.uint8)).save(DIFF_PATH)
+    subprocess.Popen(["xdg-open", DIFF_PATH], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
 
 def cleanup_temp_files() -> None:
@@ -265,7 +276,8 @@ def ocr_loop(monitor: str | None, area: str | None, max_alerts: int, cooldown: i
 
 
 def change_loop(monitor: str | None, area: str | None, max_alerts: int, cooldown: int,
-                interval: float, noise: int, threshold: float, on_change: str | None) -> None:
+                interval: float, noise: int, threshold: float, on_change: str | None,
+                show_diff: bool) -> None:
     target = area if area else monitor
     alert_count = 0
     log.debug(f"Starting in {interval}s...")
@@ -284,6 +296,8 @@ def change_loop(monitor: str | None, area: str | None, max_alerts: int, cooldown
 
             if diff_pct > threshold:
                 log.warning(f"Change detected — {diff_pct:.1f}% on {target}")
+                if show_diff:
+                    show_diff_image(prev_frame, curr_frame, noise)
                 run_action(on_change, f"Detected {diff_pct:.1f}% change on {target}")
                 alert_count += 1
                 if max_alerts_reached(alert_count, max_alerts):
@@ -351,6 +365,8 @@ def main() -> None:
         overlay_proc = show_area_overlay(args.area)
     elif args.monitor is None:
         args.monitor = select_monitor(get_monitors())
+    if args.show_diff and not args.area:
+        log.warning("--show-diff works best with --area — on a full monitor the diff will show too much noise")
     log_startup(args)
     log.info("Monitoring... (Ctrl+C to stop)\n")
 
@@ -360,7 +376,7 @@ def main() -> None:
         elif args.on_stable is not None:
             stable_loop(args.monitor, args.area, args.max_alerts, args.cooldown, args.stable_interval, args.stable_noise, args.stable_threshold, args.on_stable or None)
         else:
-            change_loop(args.monitor, args.area, args.max_alerts, args.cooldown, args.interval, args.noise, args.threshold, args.on_change)
+            change_loop(args.monitor, args.area, args.max_alerts, args.cooldown, args.interval, args.noise, args.threshold, args.on_change, args.show_diff)
     finally:
         if overlay_proc and overlay_proc.poll() is None:
             overlay_proc.kill()
