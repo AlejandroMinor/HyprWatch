@@ -6,6 +6,7 @@ import logging
 import json
 import sys
 import os
+import signal
 from PIL import Image
 import numpy as np
 from logger import setup_logging
@@ -14,6 +15,10 @@ TEMP_DIR = "/tmp/hyprwatch/"
 PREV_PATH = f"{TEMP_DIR}hyprwatch_1.png"
 CURR_PATH = f"{TEMP_DIR}hyprwatch_2.png"
 PROJECT_TITLE = "Hyprwatch - Screen Change Monitor for Hyprland"
+
+OVERLAY_COLOR = (1, 0.15, 0.15, 0.95)  # RGBA, values 0-1
+OVERLAY_BORDER = 3                   # border width in px
+OVERLAY_RADIUS = 10                  # corner radius in px
 
 log = logging.getLogger(__name__)
 
@@ -52,6 +57,91 @@ def select_area() -> str:
         print("No area selected.")
         sys.exit(0)
     return result.stdout.decode().strip()
+
+
+def show_area_overlay(area: str) -> subprocess.Popen:
+    pos, size = area.split(" ")
+    ax, ay = int(float(pos.split(",")[0])), int(float(pos.split(",")[1]))
+    w, h = int(float(size.split("x")[0])), int(float(size.split("x")[1]))
+
+    connector, rel_x, rel_y = None, ax, ay
+    for m in get_monitors():
+        t = m.get("transform", 0)
+        ew = m["height"] if t in (1, 3, 5, 7) else m["width"]
+        eh = m["width"] if t in (1, 3, 5, 7) else m["height"]
+        if m["x"] <= ax < m["x"] + ew and m["y"] <= ay < m["y"] + eh:
+            connector, rel_x, rel_y = m["name"], ax - m["x"], ay - m["y"]
+            break
+
+    r, g, b, a = OVERLAY_COLOR
+    bw = OVERLAY_BORDER
+    rad = OVERLAY_RADIUS
+
+    script = f"""
+import gi, cairo, math
+gi.require_version('Gtk', '4.0')
+gi.require_version('Gtk4LayerShell', '1.0')
+from gi.repository import Gtk, Gtk4LayerShell, GLib, Gdk
+
+def draw(area, ctx, width, height, _):
+    ctx.set_source_rgba(0, 0, 0, 0)
+    ctx.paint()
+    ctx.set_source_rgba({r}, {g}, {b}, {a})
+    ctx.set_line_width({bw})
+    ctx.set_dash([12, 6], 0)
+    half = {bw} / 2
+    x, y, w, h, r = half, half, width - {bw}, height - {bw}, {rad}
+    ctx.arc(x + r, y + r, r, math.pi, 3 * math.pi / 2)
+    ctx.arc(x + w - r, y + r, r, 3 * math.pi / 2, 0)
+    ctx.arc(x + w - r, y + h - r, r, 0, math.pi / 2)
+    ctx.arc(x + r, y + h - r, r, math.pi / 2, math.pi)
+    ctx.close_path()
+    ctx.stroke()
+
+def on_realize(win):
+    surface = win.get_surface()
+    if surface:
+        surface.set_input_region(cairo.Region())
+
+def activate(app):
+    win = Gtk.ApplicationWindow(application=app)
+    Gtk4LayerShell.init_for_window(win)
+    Gtk4LayerShell.set_layer(win, Gtk4LayerShell.Layer.OVERLAY)
+    Gtk4LayerShell.set_keyboard_mode(win, Gtk4LayerShell.KeyboardMode.NONE)
+    display = Gdk.Display.get_default()
+    monitors = display.get_monitors()
+    for i in range(monitors.get_n_items()):
+        m = monitors.get_item(i)
+        if m.get_connector() == '{connector}':
+            Gtk4LayerShell.set_monitor(win, m)
+            break
+    Gtk4LayerShell.set_anchor(win, Gtk4LayerShell.Edge.TOP, True)
+    Gtk4LayerShell.set_anchor(win, Gtk4LayerShell.Edge.LEFT, True)
+    Gtk4LayerShell.set_margin(win, Gtk4LayerShell.Edge.TOP, {rel_y})
+    Gtk4LayerShell.set_margin(win, Gtk4LayerShell.Edge.LEFT, {rel_x})
+    win.set_default_size({w}, {h})
+    win.set_decorated(False)
+    win.set_can_focus(False)
+    Gtk4LayerShell.set_exclusive_zone(win, -1)
+    win.connect('realize', on_realize)
+    css = Gtk.CssProvider()
+    css.load_from_data("window {{ background: transparent; }}", -1)
+    Gtk.StyleContext.add_provider_for_display(display, css, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
+    da = Gtk.DrawingArea()
+    da.set_draw_func(draw, None)
+    win.set_child(da)
+    win.present()
+
+app = Gtk.Application(application_id='org.hyprwatch.overlay')
+app.connect('activate', activate)
+app.run([])
+"""
+    env = os.environ.copy()
+    env["LD_PRELOAD"] = "/usr/lib/libgtk4-layer-shell.so"
+    proc = subprocess.Popen(["python3", "-c", script], env=env)
+    subprocess.run(["hyprctl", "keyword", "windowrulev2",
+                    "nofocus, class:^(org.hyprwatch.overlay)$"], capture_output=True)
+    return proc
 
 
 def log_startup(args: argparse.Namespace) -> None:
@@ -201,18 +291,33 @@ def main() -> None:
     args = define_args()
     if args.quiet:
         logging.getLogger().setLevel(logging.WARNING)
+    overlay_proc = None
+
+    def _cleanup(*_):
+        if overlay_proc and overlay_proc.poll() is None:
+            overlay_proc.kill()
+        sys.exit(0)
+
+    signal.signal(signal.SIGTERM, _cleanup)
+    signal.signal(signal.SIGHUP, _cleanup)
+
     if args.area is not None:
         if args.area == "":
             args.area = select_area()
+        overlay_proc = show_area_overlay(args.area)
     elif args.monitor is None:
         args.monitor = select_monitor(get_monitors())
     log_startup(args)
     log.info("Monitoring... (Ctrl+C to stop)\n")
 
-    if args.on_stable is not None:
-        stable_loop(args.monitor, args.area, args.max_alerts, args.cooldown, args.stable_interval, args.stable_noise, args.stable_threshold, args.on_stable or None)
-    else:
-        change_loop(args.monitor, args.area, args.max_alerts, args.cooldown, args.interval, args.noise, args.threshold, args.on_change)
+    try:
+        if args.on_stable is not None:
+            stable_loop(args.monitor, args.area, args.max_alerts, args.cooldown, args.stable_interval, args.stable_noise, args.stable_threshold, args.on_stable or None)
+        else:
+            change_loop(args.monitor, args.area, args.max_alerts, args.cooldown, args.interval, args.noise, args.threshold, args.on_change)
+    finally:
+        if overlay_proc and overlay_proc.poll() is None:
+            overlay_proc.kill()
 
 
 if __name__ == "__main__":

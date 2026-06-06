@@ -6,7 +6,7 @@ Detects when something changes on your screen and sends a desktop notification �
 ## System dependencies
 
 ```bash
-sudo pacman -S python-pillow python-numpy grim libnotify fzf slurp
+sudo pacman -S python-pillow python-numpy grim libnotify fzf slurp gtk4-layer-shell python-gobject
 ```
 
 ## Usage
@@ -21,7 +21,7 @@ Or pass a monitor name directly to skip the picker:
 python hyprwatch.py --monitor DP-1
 ```
 
-To watch a specific area, use `--area` without a value to draw the selection interactively (coordinates are absolute):
+To watch a specific area, use `--area` without a value to draw the selection interactively with slurp:
 ```bash
 python hyprwatch.py --area
 ```
@@ -30,6 +30,8 @@ Or pass the geometry directly:
 ```bash
 python hyprwatch.py --area "100,200 800x600"
 ```
+
+When using `--area`, a red dashed border is drawn over the selected region for the duration of the session. The overlay is fully click-through — you can interact with anything inside the area normally.
 
 
 ## Options
@@ -77,6 +79,18 @@ Override stable sensitivity for a very subtle indicator:
 python hyprwatch.py --monitor DP-1 --on-stable "notify-send hyprwatch done" --stable-interval 3 --stable-threshold 0.1 --stable-noise 2
 ```
 
+
+## Customizing the overlay
+
+The overlay style is controlled by three constants at the top of `hyprwatch.py`:
+
+```python
+OVERLAY_COLOR = (1, 0.15, 0.15, 0.95)  # RGBA, values 0-1
+OVERLAY_BORDER = 3                       # border width in px
+OVERLAY_RADIUS = 10                      # corner radius in px
+```
+
+The dash pattern (`[12, 6]` — 12px stroke, 6px gap) is in the `draw` function inside `show_area_overlay`.
 
 ## How to find your monitor name
 
