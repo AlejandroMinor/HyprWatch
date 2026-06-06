@@ -6,7 +6,7 @@ Detects when something changes on your screen and sends a desktop notification �
 ## System dependencies
 
 ```bash
-sudo pacman -S python-pillow python-numpy grim libnotify fzf
+sudo pacman -S python-pillow python-numpy grim libnotify fzf slurp
 ```
 
 ## Usage
@@ -21,18 +21,30 @@ Or pass a monitor name directly to skip the picker:
 python hyprwatch.py --monitor DP-1
 ```
 
+To watch a specific area, use `--area` without a value to draw the selection interactively (coordinates are absolute):
+```bash
+python hyprwatch.py --area
+```
+
+Or pass the geometry directly:
+```bash
+python hyprwatch.py --area "100,200 800x600"
+```
+
+
 ## Options
 
 | Argument | Default | Description |
 |---|---|---|
 | `--monitor` | *(interactive picker)* | Monitor name — omit to select from a list |
-| `--interval` | `2.0` | Seconds between checks |
-| `--threshold` | `5.0` | Percentage change to trigger an alert |
-| `--noise` | `10` | Per-pixel difference to ignore (reduces false positives) |
+| `--area` | *(none)* | Area to capture as `x,y wxh` — omit value to draw interactively with slurp. Takes priority over `--monitor` |
+| `--interval` | `5.0` | Seconds between checks |
+| `--threshold` | `2.0` | Percentage change to trigger an alert |
+| `--noise` | `5` | Per-pixel difference to ignore (reduces false positives) |
 | `--on-change` | *(notify-send)* | Command to run when a change is detected |
 | `--max-alerts` | `1` | Max alerts before stopping, `0` for unlimited |
 | `--cooldown` | `30` | Seconds to wait after an alert before resuming |
-| `--on-stable` | *(notify-send)* | Command to run when no change is detected — enables stable mode |
+| `--on-stable` | *(notify-send)* | Enable stable mode — optionally pass a command, omit for notify-send |
 | `--stable-interval` | `5.0` | Seconds without change required to consider stable |
 | `--stable-threshold` | `0.05` | Max % change to consider stable — tolerates cursor blink, use `0.0` for pixel-perfect |
 | `--stable-noise` | `0` | Per-pixel difference to ignore in stable mode — `0` means pixel-perfect |
@@ -65,7 +77,6 @@ Override stable sensitivity for a very subtle indicator:
 python hyprwatch.py --monitor DP-1 --on-stable "notify-send hyprwatch done" --stable-interval 3 --stable-threshold 0.1 --stable-noise 2
 ```
 
-> **Tip:** hyprwatch doesn't have a built-in start delay, but you can use `sleep` — e.g. `sleep 10 && python hyprwatch.py --monitor DP-1`.
 
 ## How to find your monitor name
 
